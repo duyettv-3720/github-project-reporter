@@ -235,83 +235,81 @@ const itemLabel = (it) => {
   return `${num}${it.title}${who}`;
 };
 
-// --- Slack Block Kit payload ---
-function toSlackBlocks(r) {
-  const blocks = [];
-  const sec = (text) => blocks.push({ type: "section", text: { type: "mrkdwn", text } });
-
-  blocks.push({
-    type: "header",
-    text: { type: "plain_text", text: "📊 GitHub Project Daily Report", emoji: true },
-  });
-
-  const overview = [
-    `*Project:* ${r.title}`,
-    r.sprint ? `*Sprint:* ${r.sprint.title} (${fmtDate(new Date(r.sprint.startDate))} → ${fmtDate(r.sprintEnd)})` : "*Sprint:* (no active Target version)",
-    `*Progress:* ${r.progress}% (${r.total} items)`,
-    r.sprintEnd ? `*Due Date:* ${fmtDate(r.sprintEnd)}` : null,
-  ].filter(Boolean).join("\n");
-  sec(overview);
-
-  if (r.total === 0) {
-    sec("_No items assigned to the current Target version._");
-    return { blocks };
+// Group items by their Status value, preserving first-seen order.
+function groupByStatus(items) {
+  const map = new Map();
+  for (const it of items) {
+    const key = it.status ?? "No Status";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(it);
   }
-
-  const statusLines = Object.entries(r.statusCounts)
-    .map(([k, v]) => `• ${k}: ${v}`)
-    .join("\n");
-  sec(`*Status Summary:*\n${statusLines}`);
-
-  if (r.working.length) {
-    sec(`*🚧 Current Working Items:*\n${r.working.map((it) => `• ${itemLabel(it)}`).join("\n")}`);
-  }
-
-  const a = r.attention;
-  const attentionParts = [];
-  if (a.noAssignee.length)
-    attentionParts.push(`*No Assignee (${a.noAssignee.length}):*\n${a.noAssignee.map((it) => `  - ${itemLabel(it)}`).join("\n")}`);
-  if (a.overdue.length)
-    attentionParts.push(`*Overdue (${a.overdue.length}):*\n${a.overdue.map((it) => `  - ${itemLabel(it)} (due ${fmtDate(it.dueDate)})`).join("\n")}`);
-  if (a.highPriority.length)
-    attentionParts.push(`*High Priority Open (${a.highPriority.length}):*\n${a.highPriority.map((it) => `  - ${itemLabel(it)} [${it.priority}]`).join("\n")}`);
-  if (a.stale.length)
-    attentionParts.push(`*No Update > ${STALE_DAYS} days (${a.stale.length}):*\n${a.stale.map((it) => `  - ${itemLabel(it)}`).join("\n")}`);
-  if (attentionParts.length) {
-    blocks.push({ type: "divider" });
-    sec(`*⚠️ Attention Items*\n\n${attentionParts.join("\n\n")}`);
-  }
-
-  return { blocks };
+  return map;
 }
 
-// Plain-text version for console dry-run.
-function toText(r) {
-  const lines = ["📊 GitHub Project Daily Report", ""];
-  lines.push(`Project: ${r.title}`);
-  lines.push(`Sprint: ${r.sprint ? `${r.sprint.title} (${fmtDate(new Date(r.sprint.startDate))} - ${fmtDate(r.sprintEnd)})` : "(no active Target version)"}`);
-  lines.push(`Progress: ${r.progress}% (${r.total} items)`);
-  if (r.sprintEnd) lines.push(`Due Date: ${fmtDate(r.sprintEnd)}`);
-  if (r.total === 0) {
-    lines.push("", "No items assigned to the current Target version.");
-    return lines.join("\n");
+// Full plain-text report. All sections are always shown (empty ones display a
+// count of 0 rather than being hidden). Used for console output and, wrapped in
+// a Slack code block, for the Slack message.
+function renderReport(r) {
+  const L = [];
+  L.push("GitHub Project Daily Progress Report");
+  L.push("");
+  L.push("📊 Sprint Overview");
+  L.push("");
+  L.push(`Project: ${r.title}`);
+  L.push(
+    `Sprint: ${
+      r.sprint
+        ? `${r.sprint.title} (${fmtDate(new Date(r.sprint.startDate))} - ${fmtDate(r.sprintEnd)})`
+        : "(no active Target version)"
+    }`
+  );
+  L.push(`Progress: ${r.progress}% (${r.total} items)`);
+  L.push(`Due Date: ${r.sprintEnd ? fmtDate(r.sprintEnd) : "-"}`);
+  L.push("");
+
+  // Status Summary
+  L.push("Status Summary:");
+  const statusEntries = Object.entries(r.statusCounts);
+  if (statusEntries.length) {
+    statusEntries.forEach(([k, v]) => L.push(`• ${k}: ${v}`));
+  } else {
+    L.push("• (no items)");
   }
-  lines.push("", "Status Summary:");
-  for (const [k, v] of Object.entries(r.statusCounts)) lines.push(`  • ${k}: ${v}`);
+  L.push("");
+
+  // Current Working Items, grouped by status
+  L.push("🚧 Current Working Items");
+  L.push("");
   if (r.working.length) {
-    lines.push("", "🚧 Current Working Items:");
-    r.working.forEach((it) => lines.push(`  • ${itemLabel(it)}`));
+    const groups = [...groupByStatus(r.working)];
+    groups.forEach(([status, items], idx) => {
+      L.push(`${status}:`);
+      items.forEach((it) => L.push(`• ${itemLabel(it)}`));
+      if (idx < groups.length - 1) L.push("");
+    });
+  } else {
+    L.push("(none)");
   }
+  L.push("");
+
+  // Attention Items — every sub-section always shown with its count
   const a = r.attention;
-  if (a.noAssignee.length || a.overdue.length || a.highPriority.length || a.stale.length) {
-    lines.push("", "⚠️ Attention Items:");
-    if (a.noAssignee.length) { lines.push(`  No Assignee (${a.noAssignee.length}):`); a.noAssignee.forEach((it) => lines.push(`    - ${itemLabel(it)}`)); }
-    if (a.overdue.length) { lines.push(`  Overdue (${a.overdue.length}):`); a.overdue.forEach((it) => lines.push(`    - ${itemLabel(it)} (due ${fmtDate(it.dueDate)})`)); }
-    if (a.highPriority.length) { lines.push(`  High Priority Open (${a.highPriority.length}):`); a.highPriority.forEach((it) => lines.push(`    - ${itemLabel(it)} [${it.priority}]`)); }
-    if (a.stale.length) { lines.push(`  No Update > ${STALE_DAYS} days (${a.stale.length}):`); a.stale.forEach((it) => lines.push(`    - ${itemLabel(it)}`)); }
-  }
-  return lines.join("\n");
+  L.push("⚠️ Attention Items");
+  L.push("");
+  const block = (label, items, fmt) => {
+    L.push(`• ${label} (${items.length})`);
+    items.forEach((it) => L.push(`  - ${fmt ? fmt(it) : itemLabel(it)}`));
+  };
+  block("No Assignee", a.noAssignee);
+  block("Overdue", a.overdue, (it) => `${itemLabel(it)} (due ${fmtDate(it.dueDate)})`);
+  block("High Priority Open", a.highPriority, (it) => `${itemLabel(it)} [${it.priority}]`);
+  block(`No Update > ${STALE_DAYS} days`, a.stale);
+
+  return L.join("\n");
 }
+
+// Wrap the report text in a Slack code block so it renders monospace.
+const toSlackPayload = (r) => ({ text: "```\n" + renderReport(r) + "\n```" });
 
 async function sendToSlack(webhookUrl, payload) {
   const res = await fetch(webhookUrl, {
@@ -338,11 +336,11 @@ async function runProject(target) {
   const report = buildReport(title, items, iterationConfig);
 
   if (webhookUrl) {
-    await sendToSlack(webhookUrl, toSlackBlocks(report));
+    await sendToSlack(webhookUrl, toSlackPayload(report));
     console.log(`✅ ${target.name}: report sent to Slack.`);
   } else {
     console.log(`ℹ️  ${target.name}: ${target.webhookEnv} not set — printing report (dry-run):\n`);
-    console.log(toText(report));
+    console.log(renderReport(report));
     console.log("");
   }
 }
