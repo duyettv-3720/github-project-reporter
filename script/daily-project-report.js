@@ -1,4 +1,15 @@
 const { graphql } = require("@octokit/graphql");
+const {
+  STATUS_FIELD,
+  ITERATION_FIELD,
+  PRIORITY_FIELD,
+  DUE_DATE_FIELD,
+  DONE_STATUSES,
+  TODO_STATUSES,
+  HIGH_PRIORITIES,
+  STALE_DAYS,
+  SCOPE_TO_CURRENT_ITERATION,
+} = require("./config");
 
 const GH_TOKEN = process.env.GH_TOKEN;
 const PROJECT_ID = process.env.PROJECT_ID;
@@ -13,19 +24,6 @@ const gh = graphql.defaults({
     authorization: `Bearer ${GH_TOKEN}`,
   },
 });
-
-// --- Config: adjust these to match your project's Status / Iteration field names ---
-const STATUS_FIELD = "Status";
-const ITERATION_FIELD = "Target version";
-const PRIORITY_FIELD = "Priority";
-const DUE_DATE_FIELD = "Due Date";
-const DONE_STATUSES = ["Done", "Closed"];
-const TODO_STATUSES = ["Todo", "New", "Backlog"];
-const HIGH_PRIORITIES = ["High", "Urgent", "Immediate"];
-const STALE_DAYS = 3; // "No update > N days"
-// Only report on items in the current iteration (Target version).
-// Set env SCOPE=all to report on every item in the project instead.
-const SCOPE_TO_CURRENT_ITERATION = process.env.SCOPE !== "all";
 
 const QUERY = `
   query($projectId: ID!, $cursor: String) {
