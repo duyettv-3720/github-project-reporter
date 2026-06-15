@@ -3,9 +3,9 @@ name: Daily Project Report
 on:
   workflow_dispatch: {} # allow manual "Run workflow" for testing
   schedule:
-    # 14:55 GMT+7 (07:55 UTC) daily. GitHub cron is best-effort and may be
+    # 15:20 GMT+7 (08:20 UTC) daily. GitHub cron is best-effort and may be
     # delayed a few minutes; that's fine for a once-a-day report.
-    - cron: "55 7 * * *"
+    - cron: "20 8 * * *"
 
 # Avoid overlapping runs if a previous one is still going.
 concurrency:
