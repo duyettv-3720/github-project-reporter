@@ -31,10 +31,6 @@ const QUERY = `
         title
         fields(first: 30) {
           nodes {
-            ... on ProjectV2SingleSelectField {
-              name
-              options { name }
-            }
             ... on ProjectV2IterationField {
               name
               configuration {
@@ -87,7 +83,6 @@ async function fetchAllItems(projectId) {
   let cursor = null;
   let title = null;
   let iterationConfig = null;
-  let statusOptions = [];
   const rawItems = [];
 
   do {
@@ -106,12 +101,6 @@ async function fetchAllItems(projectId) {
       );
       iterationConfig = field?.configuration ?? null;
     }
-    if (!statusOptions.length) {
-      const field = project.fields.nodes.find(
-        (f) => f.name === STATUS_FIELD && f.options
-      );
-      statusOptions = field ? field.options.map((o) => o.name) : [];
-    }
     rawItems.push(...project.items.nodes);
     cursor = project.items.pageInfo.hasNextPage
       ? project.items.pageInfo.endCursor
@@ -121,7 +110,6 @@ async function fetchAllItems(projectId) {
   return {
     title,
     iterationConfig,
-    statusOptions,
     items: rawItems.map(normalizeItem).filter(Boolean),
   };
 }
@@ -194,7 +182,7 @@ const fmtDate = (d) =>
       ).padStart(2, "0")}/${d.getUTCFullYear()}`
     : "-";
 
-function buildReport(title, allItems, iterationConfig, statusOptions = []) {
+function buildReport(title, allItems, iterationConfig) {
   const sprint = currentIterationFromConfig(iterationConfig);
 
   // When scoping is on, only keep items assigned to the current Target version.
@@ -203,10 +191,8 @@ function buildReport(title, allItems, iterationConfig, statusOptions = []) {
       ? allItems.filter((it) => it.iteration?.title === sprint.title)
       : allItems;
 
-  // Seed every project status option at 0 so empty statuses still show in the
-  // summary, then count items (any unexpected status is appended after).
+  // Only count statuses that actually have items.
   const statusCounts = {};
-  for (const opt of statusOptions) statusCounts[opt] = 0;
   for (const it of items) {
     const key = it.status ?? "No Status";
     statusCounts[key] = (statusCounts[key] ?? 0) + 1;
@@ -307,20 +293,26 @@ function renderReport(r) {
   }
   L.push("");
 
-  // Attention Items — every sub-section always shown with its count
+  // Attention Items — only sub-sections that actually have items are shown.
   const a = r.attention;
-  L.push("⚠️ Attention Items");
-  L.push("");
+  const attention = [];
   const block = (label, items, fmt) => {
-    L.push(`• ${label} (${items.length})`);
-    items.forEach((it) => L.push(`  - ${fmt ? fmt(it) : itemLabel(it)}`));
+    if (!items.length) return;
+    attention.push(`• ${label} (${items.length})`);
+    items.forEach((it) => attention.push(`  - ${fmt ? fmt(it) : itemLabel(it)}`));
   };
   block("No Assignee", a.noAssignee);
   block("Overdue", a.overdue, (it) => `${itemLabel(it)} (due ${fmtDate(it.dueDate)})`);
   block("High Priority Open", a.highPriority, (it) => `${itemLabel(it)} [${it.priority}]`);
   block(`No Update > ${STALE_DAYS} days`, a.stale);
 
-  return L.join("\n");
+  if (attention.length) {
+    L.push("⚠️ Attention Items");
+    L.push("");
+    L.push(...attention);
+  }
+
+  return L.join("\n").trimEnd();
 }
 
 // Wrap the report text in a Slack code block so it renders monospace.
@@ -347,8 +339,8 @@ async function runProject(target) {
     return;
   }
 
-  const { title, items, iterationConfig, statusOptions } = await fetchAllItems(projectId);
-  const report = buildReport(title, items, iterationConfig, statusOptions);
+  const { title, items, iterationConfig } = await fetchAllItems(projectId);
+  const report = buildReport(title, items, iterationConfig);
 
   if (webhookUrl) {
     await sendToSlack(webhookUrl, toSlackPayload(report));
