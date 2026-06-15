@@ -30,4 +30,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PROJECT_ID_B: ${{ secrets.PROJECT_ID_B }}
+          SLACK_WEBHOOK_URL_B: ${{ secrets.SLACK_WEBHOOK_URL_B }}
         run: npm run report

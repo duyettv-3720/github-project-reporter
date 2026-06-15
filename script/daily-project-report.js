@@ -9,14 +9,13 @@ const {
   HIGH_PRIORITIES,
   STALE_DAYS,
   SCOPE_TO_CURRENT_ITERATION,
+  PROJECTS,
 } = require("./config");
 
 const GH_TOKEN = process.env.GH_TOKEN;
-const PROJECT_ID = process.env.PROJECT_ID;
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL; // optional: dry-run to console if unset
 
-if (!GH_TOKEN || !PROJECT_ID) {
-  throw new Error("Missing GH_TOKEN or PROJECT_ID");
+if (!GH_TOKEN) {
+  throw new Error("Missing GH_TOKEN");
 }
 
 const gh = graphql.defaults({
@@ -80,18 +79,18 @@ const QUERY = `
 `;
 
 // Fetch every page of project items, following the GraphQL cursor.
-async function fetchAllItems() {
+async function fetchAllItems(projectId) {
   let cursor = null;
   let title = null;
   let iterationConfig = null;
   const rawItems = [];
 
   do {
-    const res = await gh(QUERY, { projectId: PROJECT_ID, cursor });
+    const res = await gh(QUERY, { projectId, cursor });
     const project = res.node;
     if (!project) {
       throw new Error(
-        `Project not found for PROJECT_ID="${PROJECT_ID}". ` +
+        `Project not found for id="${projectId}". ` +
           "Check the ID is a ProjectV2 node ID and the token has access."
       );
     }
@@ -314,8 +313,8 @@ function toText(r) {
   return lines.join("\n");
 }
 
-async function sendToSlack(payload) {
-  const res = await fetch(SLACK_WEBHOOK_URL, {
+async function sendToSlack(webhookUrl, payload) {
+  const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -325,17 +324,45 @@ async function sendToSlack(payload) {
   }
 }
 
-async function main() {
-  const { title, items, iterationConfig } = await fetchAllItems();
+// Build and deliver the report for a single configured project.
+async function runProject(target) {
+  const projectId = process.env[target.projectIdEnv];
+  const webhookUrl = process.env[target.webhookEnv];
+
+  if (!projectId) {
+    console.warn(`⏭️  ${target.name}: ${target.projectIdEnv} not set — skipping.`);
+    return;
+  }
+
+  const { title, items, iterationConfig } = await fetchAllItems(projectId);
   const report = buildReport(title, items, iterationConfig);
 
-  if (SLACK_WEBHOOK_URL) {
-    await sendToSlack(toSlackBlocks(report));
-    console.log("✅ Report sent to Slack.");
+  if (webhookUrl) {
+    await sendToSlack(webhookUrl, toSlackBlocks(report));
+    console.log(`✅ ${target.name}: report sent to Slack.`);
   } else {
-    console.log("ℹ️  SLACK_WEBHOOK_URL not set — printing report (dry-run):\n");
+    console.log(`ℹ️  ${target.name}: ${target.webhookEnv} not set — printing report (dry-run):\n`);
     console.log(toText(report));
+    console.log("");
   }
+}
+
+async function main() {
+  if (!PROJECTS.length) {
+    throw new Error("No projects configured in config.js (PROJECTS is empty).");
+  }
+
+  let failures = 0;
+  for (const target of PROJECTS) {
+    try {
+      await runProject(target);
+    } catch (error) {
+      failures++;
+      console.error(`❌ ${target.name}: ${error.message ?? error}`);
+    }
+  }
+
+  if (failures) process.exit(1);
 }
 
 main().catch((error) => {
