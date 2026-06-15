@@ -1,0 +1,34 @@
+name: Daily Project Report
+
+on:
+  workflow_dispatch: {} # allow manual "Run workflow" for testing
+  schedule:
+    # TEST: every 2 minutes. NOTE: GitHub cron runs at most ~every 5 min and can be
+    # delayed/skipped under load. Switch to a daily schedule once testing is done,
+    # e.g. "0 11 * * *" = 18:00 GMT+7.
+    - cron: "*/2 * * * *"
+
+# Avoid overlapping runs if a previous one is still going.
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Send report to Slack
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: npm run report
