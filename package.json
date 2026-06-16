@@ -2,9 +2,10 @@
   "name": "github-project-reporter",
   "version": "1.0.0",
   "description": "Generates a daily report of GitHub ProjectV2 items and their field values.",
-  "main": "script/daily-project-report.js",
+  "main": "src/daily-project-report.ts",
   "scripts": {
-    "report": "node script/daily-project-report.js",
+    "report": "tsx src/daily-project-report.ts",
+    "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -21,5 +22,10 @@
   "homepage": "https://github.com/duyettv-3720/github-project-reporter#readme",
   "dependencies": {
     "@octokit/graphql": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }

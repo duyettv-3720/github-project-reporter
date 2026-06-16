@@ -4,9 +4,9 @@ on:
   # Manual runs and external schedulers (e.g. cron-job.org) via the dispatch API.
   workflow_dispatch: {}
   schedule:
-    # 20:00 GMT+7 (13:00 UTC) daily. GitHub cron is best-effort and may be
+    # 11:30 GMT+7 (04:30 UTC) daily. GitHub cron is best-effort and may be
     # delayed a few minutes; that's fine for a once-a-day report.
-    - cron: "0 13 * * *"
+    - cron: "30 4 * * *"
 
 # Avoid overlapping runs if a previous one is still going.
 concurrency:
