@@ -41,7 +41,6 @@ export function renderReport(r: Report): string {
   L.push("");
   L.push(REPORT_LABELS.overview);
   L.push("");
-  L.push(`Project: ${r.title}`);
   L.push(
     `Sprint: ${
       r.sprint
@@ -53,14 +52,12 @@ export function renderReport(r: Report): string {
   L.push(`Due Date: ${r.sprintEnd ? fmtDate(r.sprintEnd) : "-"}`);
   L.push("");
 
-  // Status Summary
-  L.push(REPORT_LABELS.statusSummary);
+  // Status Summary — all counts on a single line.
   const statusEntries = Object.entries(r.statusCounts);
-  if (statusEntries.length) {
-    statusEntries.forEach(([k, v]) => L.push(`• ${k}: ${v}`));
-  } else {
-    L.push("• (no items)");
-  }
+  const statusLine = statusEntries.length
+    ? statusEntries.map(([k, v]) => `${k}: ${v}`).join(" • ")
+    : "(no items)";
+  L.push(`${REPORT_LABELS.statusSummary} ${statusLine}`);
   L.push("");
 
   // Current Working Items, grouped by status
