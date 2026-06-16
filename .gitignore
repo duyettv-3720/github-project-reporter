@@ -1,3 +1,9 @@
 node_modules/
 .env
 *.log
+/plans
+/.claude
+
+# Takumi Agent Kit / tooling artifacts (not part of the app)
+release-manifest.json
+.repomixignore
